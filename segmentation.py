@@ -3,9 +3,6 @@ from llama_index.core.node_parser import MarkdownNodeParser
 from llama_index.readers.file import FlatReader
 from llama_index.core.node_parser import SentenceSplitter
 from pathlib import Path
-import re
-import copy
-from llama_index.core.schema import Document
 
 markdown_file_path = "./converted_docs/uav_swarm_page23-25/uav_swarm_page23-25.md"
 
