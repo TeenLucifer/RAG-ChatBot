@@ -25,3 +25,52 @@
 
 ### 业务效果
 基于检索增强的运维知识智能问答项目上线之后，技术咨询问题解决率达到85%以上，实现了大模型技术在工业场景中的成功落地。
+
+## 环境启动方式
+### milvus + attu
+* milvus: standalone.bat
+* attu: docker run -d -p 8000:3000 -e MILVUS_URL=host.docker.internal:19530 zilliz/attu:v2.5
+
+### elasticsearch
+
+* es账号: elastic
+* es密码: 1999jnhw&&wjt
+
+* kibana启动命令: $ docker run -d --name kibana --net es-net -p 5601:5601 kibana:8.6.0
+
+```bash
+docker run -d --name kibana \
+    -e ELASTICSERACH_HOSTS=http://es:9200 \
+    --network=es-net \
+    -p 5601:5601 \
+    kibana:8.6.0
+```
+
+```bash
+docker run -d --name es \
+    -e "ES_JAVA_OPTS=-Xms1024m -Xmx1024m" \
+    -e "discovery.type=single-node" \
+    -v D:\Projects\elasticsearch\es-data:/usr/share/elasticsearch/data \
+    -v D:\Projects\elasticsearch\es-plugins:/usr/share/elasticsearch/plugins \
+    -v D:\Projects\elasticsearch\temp:/usr/temp \
+    --privileged \
+    --network es-net \
+    -p 9200:9200 \
+    -p 9300:9300 \
+    elasticsearch:8.6.0
+```
+
+``` bash
+-d                                      #容器后台运行
+--name es                               #容器命名
+-e "ES_JAVA_OPTS=-Xms1024m -Xmx1024m"   #设置容器最小最大运行内存
+-e "discovery.type=single-node"         #设置es的运行模式是单机运行
+-v C:\Users\14547\Desktop\lyq\elasticsearch\es-data:/usr/share/elasticsearch/data  #数据卷，方便容器持久化
+-v D:\Projects\elasticsearch\es-plugins:/usr/share/elasticsearch/plugins #数据卷，方便容器持久化
+-v D:\Projects\elasticsearch\temp:/usr/temp #数据卷，方便容器持久化
+--privileged                            #以最大权限运行容器
+--network es-net                        #执行容器运行网络，与kibana运行保持在同一网络
+-p 9200:9200                            #开放端口
+-p 9300:9300                            #开放端口
+elasticsearch:8.6.0                     #运行镜像和tag
+```

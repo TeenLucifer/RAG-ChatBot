@@ -1,2 +1,7 @@
 #converted_docs/
 rag_docs/
+data/
+demo/
+
+.env
+startup_database.bat

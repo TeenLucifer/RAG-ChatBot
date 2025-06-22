@@ -1,18 +1,40 @@
+# 构建语料库: 向量库+字面库
+
 from pathlib import Path
-import chromadb
 from milvus import default_server
 from llama_index.core import VectorStoreIndex, StorageContext
 from llama_index.core.node_parser import MarkdownNodeParser, SentenceSplitter
 from llama_index.embeddings.dashscope import DashScopeEmbedding
 from llama_index.llms.dashscope import DashScope
 from llama_index.vector_stores.milvus import MilvusVectorStore
-from llama_index.vector_stores.chroma import ChromaVectorStore
+from llama_index.vector_stores.milvus.utils import BM25BuiltInFunction
 from llama_index.readers.file import FlatReader
+from dotenv import load_dotenv
+import os
+import textwrap
 
-DASHSCOPE_API_KEY = "sk-4934b9ab077448e594033f2c95bc41c8"
-DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+# 加载.env文件
+load_dotenv()
+
+DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
+DASHSCOPE_BASE_URL = os.getenv("DASHSCOPE_BASE_URL")
+DASHSCOPE_LLM_MODEL_NAME = os.getenv("DASHSCOPE_LLM_MODEL_NAME")
+DASHSCOPE_EMBED_MODEL_NAME = os.getenv("DASHSCOPE_EMBED_MODEL_NAME")
+
+MILVUS_HOST = os.getenv("MILVUS_HOST")
+MILVUS_PORT = os.getenv("MILVUS_PORT")
+MILVUS_VECTOR_COLLECTION_NAME = os.getenv("MILVUS_VECTOR_COLLECTION_NAME")
+MILVUS_SPARSE_COLLECTION_NAME = os.getenv("MILVUS_SPARSE_COLLECTION_NAME")
+
+ES_HOST = os.getenv("ES_URL")
+ES_PORT = os.getenv("ES_PORT")
+ES_USERNAME = os.getenv("ES_USERNAME")
+ES_PASSWORD = os.getenv("ES_PASSWORD")
+ES_INDEX_NAME = os.getenv("ES_INDEX_NAME")
+
 doc_path = "./converted_docs/uav_swarm_page23-25/uav_swarm_page23-25.md"
 LOCAL = 1
+MILVUS_URI = 'http://' + MILVUS_HOST + ":" + MILVUS_PORT
 
 def document_segmentation(doc_path):
     markdown_file_path = doc_path
@@ -39,60 +61,89 @@ def document_segmentation(doc_path):
 # 配置大语言模型
 llm = DashScope(
     api_key=DASHSCOPE_API_KEY,
-    model_name="qwen-plus"
+    model_name=DASHSCOPE_LLM_MODEL_NAME,
 )
-# 配置嵌入模型（替换为您的API Key）
+# 配置嵌入模型
 embed_model = DashScopeEmbedding(
     api_key=DASHSCOPE_API_KEY,
-    model_name="text-embedding-v4",
+    model_name=DASHSCOPE_EMBED_MODEL_NAME,
     embed_batch_size=10
 )
 
 # 加载文档
 nodes = document_segmentation(doc_path)
 
-# 构建语料库: 向量库+字面库(milvus+elasticsearch 或 chromadb+whoosh)
-if 1 == LOCAL:
-    # 初始化Milvus本地服务（生产环境建议使用独立部署）
-    default_server.start()
-    vector_store = MilvusVectorStore(
-        uri="http://localhost:19530",  # Milvus默认端口
-        dim=1024,  # 向量维度需与嵌入模型匹配
-        collection_name="product_reviews"  # 自定义集合名称
-    )
-    # TODO(wangjintao): 第一次构建完向量索引后不需要重复构建
-    index = VectorStoreIndex(
-        nodes=nodes,
-        embed_model=embed_model,
-        vector_store=vector_store
-    )
+# 初始化Milvus本地服务
+default_server.start()
+
+# 向量检索的向量库
+milvus_vector_store = MilvusVectorStore(
+    uri=MILVUS_URI,
+    dim=1024,  # 向量维度需与嵌入模型匹配
+    overwrite=True,
+    collection_name=MILVUS_VECTOR_COLLECTION_NAME  # 自定义集合名称
+)
+milvus_vector_storage_context = StorageContext.from_defaults(vector_store=milvus_vector_store)
+milvus_vector_index = VectorStoreIndex(
+    nodes=nodes,
+    embed_model=embed_model,
+    storage_context=milvus_vector_storage_context,
+    show_progress=True
+)
+
+# 字面检索的向量库
+milvus_sparse_vector_store = MilvusVectorStore(
+    uri=MILVUS_URI,
+    dim=1024,
+    enable_sparse=True,
+    sparse_embedding_function=BM25BuiltInFunction(),
+    overwrite=True,
+    collection_name=MILVUS_SPARSE_COLLECTION_NAME  # 自定义集合名称
+)
+milvus_sparse_storage_context = StorageContext.from_defaults(vector_store=milvus_sparse_vector_store)
+milvus_sparse_index = VectorStoreIndex(
+    nodes=nodes,
+    storage_context=milvus_sparse_storage_context,
+    embed_model=embed_model,
+    show_progress=True
+)
+
+# 向量检索查询示例
+milvus_vector_query_engine = milvus_vector_index.as_query_engine(
+    llm=llm,
+    similarity_top_k=5,
+)
+milvus_vector_response = milvus_vector_query_engine.query("分离-对齐-凝聚是什么？")
+print("向量检索结果：")
+print(milvus_vector_response)
+# 显示向量检索召回的各个结果
+if hasattr(milvus_vector_response, "source_nodes"):
+    print("\n召回的各个结果：")
+    for i, node in enumerate(milvus_vector_response.source_nodes):
+        print(f"\n结果 {i+1}:")
+        print(textwrap.fill(str(node.node.get_content()), 100))
+        print(f"分数: {getattr(node, 'score', '无')}")
 else:
-    # 创建chromadb向量检索库
-    chroma_client = chromadb.PersistentClient(path="./chroma_db")
-    chroma_collection = chroma_client.get_or_create_collection("demo")
-    vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
-    storage_context = StorageContext.from_defaults(vector_store=vector_store)
-    # 创建索引
-    if (0 == chroma_collection.count()):
-        # 若集合为空, 创建新索引
-        index = VectorStoreIndex(
-            nodes=nodes,
-            embed_model=embed_model,
-            vector_store=vector_store
-        )
-    else:
-        # 若集合非空, 加载已有索引
-        index = VectorStoreIndex.from_vector_store(
-            vector_store=vector_store,
-            storage_context=storage_context
-        )
-    # 创建whoosh字面检索库
+    print("未找到召回结果。")
 
-
-# 查询示例
-query_engine = index.as_query_engine(llm=llm)
-response = query_engine.query("研究无人机集群的态势感知问题, 首要任务是什么？")
-print(response)
+# 字面检索查询示例
+milvus_sparse_query_engine = milvus_sparse_index.as_query_engine(
+    llm=llm,
+    vector_store_query_mode="sparse",
+    similarity_top_k=5
+)
+milvus_sparse_response = milvus_sparse_query_engine.query("分离-对齐-凝聚是什么？")
+print("\n字面检索结果：")
+print(milvus_sparse_response)
+# 显示字面检索召回的各个结果
+if hasattr(milvus_sparse_response, "source_nodes"):
+    print("\n召回的各个结果：")
+    for i, node in enumerate(milvus_sparse_response.source_nodes):
+        print(f"\n结果 {i+1}:")
+        print(textwrap.fill(str(node.node.get_content()), 100))
+        print(f"分数: {getattr(node, 'score', '无')}")
+else:
+    print("未找到召回结果。")
 
 if 1 == LOCAL:
     # 关闭Milvus服务（开发时可选）
