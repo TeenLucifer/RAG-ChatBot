@@ -1,8 +1,7 @@
 # 构建语料库: 向量库+字面库
 
 from pathlib import Path
-from milvus import default_server
-from llama_index.core import VectorStoreIndex, StorageContext
+from llama_index.core import VectorStoreIndex, StorageContext, Settings
 from llama_index.core.node_parser import MarkdownNodeParser, SentenceSplitter
 from llama_index.embeddings.dashscope import DashScopeEmbedding
 from llama_index.llms.dashscope import DashScope
@@ -12,6 +11,9 @@ from llama_index.readers.file import FlatReader
 from dotenv import load_dotenv
 import os
 import textwrap
+from llama_index.vector_stores.elasticsearch import AsyncBM25Strategy
+from llama_index.vector_stores.elasticsearch import ElasticsearchStore
+import time
 
 # 加载.env文件
 load_dotenv()
@@ -23,18 +25,11 @@ DASHSCOPE_EMBED_MODEL_NAME = os.getenv("DASHSCOPE_EMBED_MODEL_NAME")
 
 MILVUS_HOST = os.getenv("MILVUS_HOST")
 MILVUS_PORT = os.getenv("MILVUS_PORT")
-MILVUS_VECTOR_COLLECTION_NAME = os.getenv("MILVUS_VECTOR_COLLECTION_NAME")
+MILVUS_DENSE_COLLECTION_NAME = os.getenv("MILVUS_DENSE_COLLECTION_NAME")
 MILVUS_SPARSE_COLLECTION_NAME = os.getenv("MILVUS_SPARSE_COLLECTION_NAME")
 
-ES_HOST = os.getenv("ES_URL")
-ES_PORT = os.getenv("ES_PORT")
-ES_USERNAME = os.getenv("ES_USERNAME")
-ES_PASSWORD = os.getenv("ES_PASSWORD")
-ES_INDEX_NAME = os.getenv("ES_INDEX_NAME")
-
 doc_path = "./converted_docs/uav_swarm_page23-25/uav_swarm_page23-25.md"
-LOCAL = 1
-MILVUS_URI = 'http://' + MILVUS_HOST + ":" + MILVUS_PORT
+MILVUS_URI = "http://" + MILVUS_HOST + ":" + MILVUS_PORT
 
 def document_segmentation(doc_path):
     markdown_file_path = doc_path
@@ -73,78 +68,54 @@ embed_model = DashScopeEmbedding(
 # 加载文档
 nodes = document_segmentation(doc_path)
 
-# 初始化Milvus本地服务
-default_server.start()
-
 # 向量检索的向量库
-milvus_vector_store = MilvusVectorStore(
+milvus_dense_store = MilvusVectorStore(
     uri=MILVUS_URI,
     dim=1024,  # 向量维度需与嵌入模型匹配
+    collection_name=MILVUS_DENSE_COLLECTION_NAME,
     overwrite=True,
-    collection_name=MILVUS_VECTOR_COLLECTION_NAME  # 自定义集合名称
 )
-milvus_vector_storage_context = StorageContext.from_defaults(vector_store=milvus_vector_store)
-milvus_vector_index = VectorStoreIndex(
+milvus_dense_storage_context = StorageContext.from_defaults(vector_store=milvus_dense_store)
+milvus_dense_index = VectorStoreIndex(
     nodes=nodes,
     embed_model=embed_model,
-    storage_context=milvus_vector_storage_context,
+    storage_context=milvus_dense_storage_context,
     show_progress=True
 )
 
-# 字面检索的向量库
-milvus_sparse_vector_store = MilvusVectorStore(
+# 稀疏检索的向量库(接近于字面检索)
+Settings.embed_model = None # 显示禁用嵌入模型
+milvus_sparse_store = MilvusVectorStore(
     uri=MILVUS_URI,
-    dim=1024,
-    enable_sparse=True,
+    enable_dense=False,  # 不使用稠密向量
+    enable_sparse=True,  # 启用稀疏向量
     sparse_embedding_function=BM25BuiltInFunction(),
+    collection_name=MILVUS_SPARSE_COLLECTION_NAME,
     overwrite=True,
-    collection_name=MILVUS_SPARSE_COLLECTION_NAME  # 自定义集合名称
 )
-milvus_sparse_storage_context = StorageContext.from_defaults(vector_store=milvus_sparse_vector_store)
+milvus_sparse_storage_context = StorageContext.from_defaults(vector_store=milvus_sparse_store)
 milvus_sparse_index = VectorStoreIndex(
     nodes=nodes,
     storage_context=milvus_sparse_storage_context,
-    embed_model=embed_model,
-    show_progress=True
+    show_progress=True,
 )
 
-# 向量检索查询示例
-milvus_vector_query_engine = milvus_vector_index.as_query_engine(
-    llm=llm,
-    similarity_top_k=5,
-)
-milvus_vector_response = milvus_vector_query_engine.query("分离-对齐-凝聚是什么？")
-print("向量检索结果：")
-print(milvus_vector_response)
-# 显示向量检索召回的各个结果
-if hasattr(milvus_vector_response, "source_nodes"):
-    print("\n召回的各个结果：")
-    for i, node in enumerate(milvus_vector_response.source_nodes):
-        print(f"\n结果 {i+1}:")
-        print(textwrap.fill(str(node.node.get_content()), 100))
-        print(f"分数: {getattr(node, 'score', '无')}")
-else:
-    print("未找到召回结果。")
+# 等待索引构建完成后再测试查询
+time.sleep(2)
 
-# 字面检索查询示例
-milvus_sparse_query_engine = milvus_sparse_index.as_query_engine(
-    llm=llm,
+# 稠密向量索引测试
+milvus_dense_retriever = milvus_dense_index.as_retriever(similarity_top_k=5)
+res_nodes = milvus_dense_retriever.retrieve("吸引-结队-排斥规则是什么")
+print("\n稠密向量(正常向量)检索结果:")
+for node in res_nodes:
+    print(node.get_content())
+
+# 稀疏向量索引测试(接近字面检索)
+milvus_sparse_retriever = milvus_sparse_index.as_retriever(
     vector_store_query_mode="sparse",
     similarity_top_k=5
 )
-milvus_sparse_response = milvus_sparse_query_engine.query("分离-对齐-凝聚是什么？")
-print("\n字面检索结果：")
-print(milvus_sparse_response)
-# 显示字面检索召回的各个结果
-if hasattr(milvus_sparse_response, "source_nodes"):
-    print("\n召回的各个结果：")
-    for i, node in enumerate(milvus_sparse_response.source_nodes):
-        print(f"\n结果 {i+1}:")
-        print(textwrap.fill(str(node.node.get_content()), 100))
-        print(f"分数: {getattr(node, 'score', '无')}")
-else:
-    print("未找到召回结果。")
-
-if 1 == LOCAL:
-    # 关闭Milvus服务（开发时可选）
-    default_server.stop()
+res_nodes = milvus_sparse_retriever.retrieve("吸引-结队-排斥规则是什么")
+print("\n稀疏向量(字面)检索结果:")
+for node in res_nodes:
+    print(node.get_content())
