@@ -2,6 +2,11 @@
 rag_docs/
 data/
 demo/
+volumes/
 
 .env
 startup_database.bat
+standalone_embed.bat
+user.yaml
+test.py
+embedEtcd.yaml

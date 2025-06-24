@@ -1,5 +1,6 @@
 # 构建语料库: 向量库+字面库
-
+import os
+import time
 from pathlib import Path
 from llama_index.core import VectorStoreIndex, StorageContext, Settings
 from llama_index.core.node_parser import MarkdownNodeParser, SentenceSplitter
@@ -9,11 +10,6 @@ from llama_index.vector_stores.milvus import MilvusVectorStore
 from llama_index.vector_stores.milvus.utils import BM25BuiltInFunction
 from llama_index.readers.file import FlatReader
 from dotenv import load_dotenv
-import os
-import textwrap
-from llama_index.vector_stores.elasticsearch import AsyncBM25Strategy
-from llama_index.vector_stores.elasticsearch import ElasticsearchStore
-import time
 
 # 加载.env文件
 load_dotenv()
@@ -84,12 +80,23 @@ milvus_dense_index = VectorStoreIndex(
 )
 
 # 稀疏检索的向量库(接近于字面检索)
+bm25_function = BM25BuiltInFunction(
+    analyzer_params={
+        "type": "chinese",
+        "tokenizer": "jieba",  # 使用 Jieba 中文分词器
+        "filter": [
+            {"type": "stop", "stop_words": ["的", "了", "是"]},  # 中文停用词
+            {"type": "length", "min": 2, "max": 20},           # 过滤超短/超长词
+        ],
+    },
+    enable_match=True,
+)
 Settings.embed_model = None # 显示禁用嵌入模型
 milvus_sparse_store = MilvusVectorStore(
     uri=MILVUS_URI,
     enable_dense=False,  # 不使用稠密向量
     enable_sparse=True,  # 启用稀疏向量
-    sparse_embedding_function=BM25BuiltInFunction(),
+    sparse_embedding_function=bm25_function,
     collection_name=MILVUS_SPARSE_COLLECTION_NAME,
     overwrite=True,
 )
