@@ -1,10 +1,10 @@
 #converted_docs/
 rag_docs/
 data/
-demo/
 volumes/
 
 .env
+demo/.env
 startup_database.bat
 standalone_embed.bat
 user.yaml
