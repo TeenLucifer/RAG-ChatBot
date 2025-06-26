@@ -10,3 +10,5 @@ standalone_embed.bat
 user.yaml
 test.py
 embedEtcd.yaml
+data_wiki/
+data_wiki_mini/
