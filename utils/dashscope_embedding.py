@@ -1,4 +1,6 @@
 """DashScope embeddings file."""
+# 目前llamaindex的DashScopeEmbedding不支持DashScopeMultiModalEmbeddingModels
+# 因此进行了重写调用DashScope的SDK实现MultiModalEmbedding
 
 import logging
 from enum import Enum
