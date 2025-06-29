@@ -74,3 +74,6 @@ docker run -d --name es \
 -p 9300:9300                            #开放端口
 elasticsearch:8.6.0                     #运行镜像和tag
 ```
+## llama-index闭坑
+1. 不支持dashscope的multi-modal embedding, 需要自行改写multi-modal embedding的代码
+2. 不支持dashscope的multi-modal model, llama-index官方提供的demo也跑不起来, 需要调用dashscope的sdk完成对话

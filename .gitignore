@@ -13,3 +13,4 @@ embedEtcd.yaml
 data_wiki/
 data_wiki_mini/
 utils/__pycache__/
+.vscode/
