@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Tuple, List, Union
 if TYPE_CHECKING:
@@ -19,8 +20,42 @@ from llama_index.retrievers.bm25 import BM25Retriever
 from pymilvus import connections, utility
 import jieba
 from .dashscope_embedding import DashScopeEmbedding
+import streamlit as st
+from streamlit.runtime.uploaded_file_manager import UploadedFile
 
 EmbedType = Union[BaseEmbedding, "LCEmbeddings", str]
+
+# 处理从前端上传的文件, 需要先输出到服务端本地再读取
+def process_uploaded_files(uploaded_files: List[UploadedFile]):
+    nodes = []
+
+    if not os.path.exists("temp"):
+        os.makedirs("temp")
+
+    for file in uploaded_files:
+        try:
+            file_path = os.path.join("temp", file.name)
+            with open(file_path, "wb") as f:
+                f.write(file.getbuffer())
+
+            if file.name.endswith(".pdf"):
+                pass
+            elif file.name.endswith(".docx"):
+                pass
+            elif file.name.endswith(".txt"):
+                pass
+            elif file.name.endswith(".md"):
+                refined_nodes = document_segmentation(doc_path=file_path)
+            else:
+                continue
+            nodes.extend(refined_nodes)
+
+            os.remove(file_path)
+        except Exception as e:
+            st.error(f"加载文件 {file.name} 失败: {str(e)}")
+            return
+
+        return nodes
 
 # 解析pdf文件为markdown格式
 def parse_pdf(

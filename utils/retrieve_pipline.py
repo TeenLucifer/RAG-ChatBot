@@ -5,6 +5,7 @@ from typing import List, Union, Sequence
 from dotenv import load_dotenv
 from llama_index.core import VectorStoreIndex, StorageContext, PromptTemplate, get_response_synthesizer, Settings
 from llama_index.core.schema import ImageNode, ImageDocument
+from llama_index.core.base.response.schema import RESPONSE_TYPE
 from llama_index.embeddings.dashscope import DashScopeEmbedding
 from llama_index.llms.dashscope import DashScope
 from llama_index.multi_modal_llms.dashscope import DashScopeMultiModal
@@ -124,7 +125,7 @@ def retrieve_documents(
     keywords_retriever: BaseRetriever,
     dashscope_api_key: str,
     dashscope_llm_model_name: str,
-):
+) -> RESPONSE_TYPE:
     # 查询扩写
     sub_queries, hypothesises = expand_query(
         use_multi_modal=False,
@@ -164,22 +165,18 @@ def retrieve_documents(
         query_str=query
     )
     # 过滤掉低于阈值的节点
-    filtered_nodes = [node for node in reranked_nodes if node.score > 0.4]
+    filtered_nodes = [node for node in reranked_nodes if node.score > 0.2]
 
     if not filtered_nodes:
-        print("没有找到相关内容")
         return "没有找到相关内容"
     else:
         response_synthesizer = get_response_synthesizer(
             llm=llm,
             verbose=True,
-            streaming=False
+            streaming=True
         )
         response = response_synthesizer.synthesize(
             query=query,
             nodes=filtered_nodes
         )
-        #print("最终回答: ", response.response)
-        #for response in responses:
-        #    print(response.delta, end="")
-        return response.response
+        return response
