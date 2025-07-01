@@ -1,0 +1,12 @@
+[
+  {
+    "UAV": {
+      "dense_collection_name": "RAG_CHATBOT_TEXT_EMBED_DENSE_COLLECTION",
+      "sparse_collection_name": "RAG_CHATBOT_TEXT_EMBED_SPARSE_COLLECTION"
+    },
+    "swarm": {
+      "dense_collection_name": "RAG_CHATBOT_TEXT_EMBED_DENSE_COLLECTION",
+      "sparse_collection_name": "RAG_CHATBOT_TEXT_EMBED_SPARSE_COLLECTION"
+    }
+  }
+]

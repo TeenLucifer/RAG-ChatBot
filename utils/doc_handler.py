@@ -1,4 +1,5 @@
 import os
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Tuple, List, Union
 if TYPE_CHECKING:
@@ -24,6 +25,62 @@ import streamlit as st
 from streamlit.runtime.uploaded_file_manager import UploadedFile
 
 EmbedType = Union[BaseEmbedding, "LCEmbeddings", str]
+
+class CorpusManagement:
+    def __init__(self, collection_map_path:str , current_corpus_name: str, is_multi_modal: bool = False):
+        self.current_corpus_name = current_corpus_name
+        self.is_multi_modal = is_multi_modal
+        self.collection_map_path = collection_map_path
+        self.dense_collection_name = current_corpus_name + "_dense_collection"
+        self.sparse_collection_name = current_corpus_name + "_sparse_collection"
+        self.image_collection_name = current_corpus_name + "_image_collection"
+        #self.collection_entry = self._create_collection_entry()
+
+    def create_collection_entry(self, current_corpus_name: str, is_multi_modal: bool = False):
+        # 创建json文件, 存储知识库名称和对应的milvus collection名称
+        if True == is_multi_modal:
+            collection_entry = {
+                current_corpus_name: {
+                    "dense_collection_name": self.dense_collection_name,
+                    "sparse_collection_name": self.sparse_collection_name,
+                    "image_collection_name": self.image_collection_name,
+                }
+            }
+        else:
+            collection_entry = {
+                current_corpus_name: {
+                    "dense_collection_name": self.dense_collection_name,
+                    "sparse_collection_name": self.sparse_collection_name,
+                }
+            }
+
+        if not os.path.exists(self.collection_map_path):
+            with open(self.collection_map_path, "w", encoding="utf-8") as f:
+                json.dump([collection_entry], f, ensure_ascii=False, indent=2)
+        else:
+            with open(self.collection_map_path, "r+", encoding="utf-8") as f:
+                try:
+                    data = json.load(f)
+                except Exception:
+                    data = []
+                # 将list[dict]转换为一个dict，便于更新
+                merged = {}
+                for item in data:
+                    merged.update(item)
+                # 更新或添加当前条目
+                merged.update(collection_entry)
+                # 再转回list[dict]格式
+                new_data = [{k: v} for k, v in merged.items()]
+                f.seek(0)
+                json.dump(new_data, f, ensure_ascii=False, indent=2)
+                f.truncate()
+
+    #def load_collection_entry(self, current_corpus_name: str):
+    #    # 从json文件中加载知识库名称和对应的milvus collection名称
+    #    if not os.path.exists(self.collection_map_path):
+    #        return None
+    #    with open(self.collection_map_path, "r", encoding="utf-8") as f:
+
 
 # 处理从前端上传的文件, 需要先输出到服务端本地再读取
 def process_uploaded_files(uploaded_files: List[UploadedFile]):
