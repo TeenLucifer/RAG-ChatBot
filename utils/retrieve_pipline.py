@@ -15,6 +15,13 @@ from llama_index.core.base.llms.types import MessageRole, ChatMessage
 from llama_index.postprocessor.dashscope_rerank import DashScopeRerank
 from llama_index.core.base.base_retriever import BaseRetriever
 import dashscope
+from llama_index.core.base.response.schema import StreamingResponse
+from llama_index.core.chat_engine import CustomChatEngine
+
+# TODO(wangjintao): 待实现CustomChatEngine, 带有chat history的对话引擎
+class TextModalChatEngine(CustomChatEngine):
+    def __init__(self, semantic_retriever: BaseRetriever, keywords_retriever: BaseRetriever, llm: DashScope, text_embed_model: DashScopeEmbedding, rerank_model: DashScopeRerank):
+        pass
 
 # 查询扩展(子问题拆解/意图识别/HyDE)
 def expand_query(
@@ -67,7 +74,7 @@ def expand_query(
         )
         sub_queries = response.output["text"].split("\n")
 
-    # TODO(wangjintao): 意图识别, 待捋清楚文档归类逻辑后实现
+    # TODO(wangjintao): 意图识别
     # HyDE
     hyde_str = (
         "你是一个智能助手, 能够根据用户的查询撰写 {num_hypothesises} 段简要问题解答，\n"
@@ -168,7 +175,7 @@ def retrieve_documents(
     filtered_nodes = [node for node in reranked_nodes if node.score > 0.2]
 
     if not filtered_nodes:
-        return "没有找到相关内容"
+        return StreamingResponse("没有找到相关内容")
     else:
         response_synthesizer = get_response_synthesizer(
             llm=llm,
@@ -177,6 +184,6 @@ def retrieve_documents(
         )
         response = response_synthesizer.synthesize(
             query=query,
-            nodes=filtered_nodes
+            nodes=filtered_nodes,
         )
         return response

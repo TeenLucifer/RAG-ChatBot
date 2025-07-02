@@ -11,6 +11,7 @@ from pymilvus import connections, utility
 #from st_pages import show_pages_from_config
 from st_pages import Page
 from llama_index.vector_stores.milvus import MilvusVectorStore
+from utils.doc_handler import RagModal, CorpusManagement
 import nest_asyncio
 
 nest_asyncio.apply()
@@ -28,40 +29,20 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
                                                                                     # Manage Session state
-if "messages" not in st.session_state:
-    st.session_state.messages = []
 if "retrieval_pipeline" not in st.session_state:
     st.session_state.retrieval_pipeline = None
 if "rag_enabled" not in st.session_state:
     st.session_state.rag_enabled = False
-if "documents_loaded" not in st.session_state:
-    st.session_state.documents_loaded = False
 
 with st.sidebar:                                                                        # 📁 Sidebar
     st.header("📁 已加载知识库")
-    # TODO(wangjintao): 显示已加载知识库名
+    if "loaded_corpus" in st.session_state and st.session_state.loaded_corpus:
+        st.markdown(f"**当前知识库:** {st.session_state.loaded_corpus}")
     st.markdown("---")
     st.header("⚙️ RAG 参数设置")
 
-    # 交互控件
-    #if st.button("Load Corpus"):
-    #    st.session_state.semantic_retriever, st.session_state.keywords_retriever = load_text_corpus(
-    #        embed_model=text_embed_model,
-    #        milvus_dense_collection_name=milvus_dense_collection_name,
-    #        milvus_sparse_collection_name=milvus_sparse_collection_name,
-    #        milvus_uri=MILVUS_URI,
-    #        semantic_retriever_top_k=5,
-    #        keywords_retriever_top_k=5,
-    #    )
-    #    if st.session_state.semantic_retriever and st.session_state.keywords_retriever:
-    #        st.session_state.documents_loaded = True
-
-    st.session_state.rag_enabled = st.checkbox("Enable RAG", value=True)
-    st.session_state.enable_hyde = st.checkbox("Enable HyDE", value=True)
-    st.session_state.enable_reranking = st.checkbox("Enable Neural Reranking", value=True)
-    st.session_state.enable_graph_rag = st.checkbox("Enable GraphRAG", value=True)
-    st.session_state.temperature = st.slider("Temperature", 0.0, 1.0, 0.3, 0.05)
-    st.session_state.max_contexts = st.slider("Max Contexts", 1, 5, 3)
+    checkbos_value = st.checkbox("多模态问答", value=False if RagModal.TEXT == st.session_state.rag_modal else True)
+    st.session_state.rag_modal = RagModal.MULTI_MODAL if checkbos_value else RagModal.TEXT
 
     if st.button("清除历史对话"):
         st.session_state.messages = []
@@ -83,7 +64,7 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-if prompt := st.chat_input(placeholder="Ask about your documents...", disabled=not st.session_state.documents_loaded):
+if prompt := st.chat_input(placeholder="Ask about your documents...", disabled=not st.session_state.loaded_corpus):
     chat_history = "\n".join([msg["content"] for msg in st.session_state.messages[-5:]])  # Last 5 messages
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):

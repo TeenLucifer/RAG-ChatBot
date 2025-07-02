@@ -1,14 +1,8 @@
 import streamlit as st
-from utils.doc_handler import process_uploaded_files, build_text_corpus, load_text_corpus, load_multi_modal_corpus, CorpusManagement
+from utils.doc_handler import RagModal, process_uploaded_files, build_text_corpus, load_text_corpus, load_multi_modal_corpus, CorpusManagement
 from pymilvus import connections, utility
 import os
 import json
-
-# TODO(wangjintao): 数据库的增删查改(或实现某种持久化存储如json文件)
-# 1. 连接数据库时查询是否存在索引collection, 不存在则创建, 存在就读取
-# 2. 索引collection用于存储知识库名对应的dense和sparse collection名称
-# 3. build知识库时以知识库名为索引, 存储dense和sparse collection名称
-# 4. 选择知识库时加载知识库名索引, 在milvus中load对应的dense和sparse collection
 
 # Custom CSS
 st.markdown("""
@@ -22,49 +16,39 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-
-if "milvus_connected" not in st.session_state:
-    st.session_state.milvus_connected = False
-
 # 侧边栏管理
 with st.sidebar:
     st.header("📁 已加载知识库")
-    # TODO(wangjintao): 显示已加载知识库名
+    if "loaded_corpus" in st.session_state and st.session_state.loaded_corpus:
+        st.markdown(f"**当前知识库:** {st.session_state.loaded_corpus}")
     st.markdown("---")
     st.header("⚙️ Milvus数据库设置")
 
-    # TODO(wangjintao): 待完善连接逻辑
     st.text("milvus uri")
     milvus_uri_input, milvus_connect_button = st.columns([3, 1])
     with milvus_uri_input:
-        st.text_input(label="milvus uri", value="http://localhost:19530", placeholder="http://localhost:19530", label_visibility="collapsed")
+        input_milvus_uri = st.text_input(label="milvus uri", value="http://localhost:19530", placeholder="http://localhost:19530", label_visibility="collapsed")
     with milvus_connect_button:
-        if st.button("连接"):
-            # 检查milvus是否连接
-            if "rag_config" in st.session_state:
-                with st.spinner("Connecting database..."):
-                    try:
-                        connections.connect(
-                            alias="default",
-                            uri=st.session_state.rag_config.milvus_uri,
-                        )
-                        st.session_state.milvus_connected = True
-                        connections.disconnect("default")
-                    except Exception as e:
-                        st.session_state.milvus_connected = False
+        connect_button = st.button("连接")
+    if connect_button:
+        # 检查milvus是否连接
+        if "rag_config" in st.session_state:
+            with st.spinner("Connecting database..."):
+                try:
+                    connections.connect(
+                        alias="default",
+                        uri=input_milvus_uri if input_milvus_uri else st.session_state.rag_config.milvus_uri,
+                    )
+                    st.session_state.milvus_connected = True
+                    connections.disconnect("default")
+                except Exception as e:
+                    st.session_state.milvus_connected = False
     if True == st.session_state.milvus_connected:
         st.success("Milvus数据库已连接!")
     else:
-        st.error("Milvus数据库连接失败!")
+        st.warning("Milvus数据库未连接!")
 
-    if "rag_config" in st.session_state:
-        if os.path.exists(st.session_state.rag_config.collection_map_file_name):
-            with open(st.session_state.rag_config.collection_map_file_name, "r", encoding="utf-8") as f:
-                collection_map = json.load(f)
-            st.session_state.existing_collections = collection_map[0].keys()
-        else:
-            st.warning("还未建立知识库。")
-
+# 文档解析, 建立知识库
 st.markdown("# 建立知识库")
 current_corpus_name:str = None
 warning_message:str = None
@@ -87,7 +71,6 @@ with corpus_build_button:
             warning_message = "知识库名称必须为全英文"
         else:
             is_build_corpus = True
-
 if warning_message:
     st.warning(warning_message)
 
@@ -97,66 +80,81 @@ if uploaded_files and current_corpus_name and True == is_build_corpus:
         # 文档解析+切分
         refined_nodes = process_uploaded_files(uploaded_files=uploaded_files)
         if refined_nodes:
-            corpus_management = CorpusManagement(
-                collection_map_path=st.session_state.collection_map_file_name,
-                corpus_name=current_corpus_name,
-                is_multi_modal=False
+            dense_collection_name, sparse_collection_name, image_collection_name = st.session_state.corpus_management.create_collection_entry(
+                current_corpus_name=current_corpus_name,
+                modal=st.session_state.rag_modal
             )
-            st.session_state.semantic_retriever, st.session_state.keywords_retriever = build_text_corpus(
-                nodes=refined_nodes,
-                category=current_corpus_name,
-                embed_model=st.session_state.rag_config.text_embed_model,
-                milvus_dense_collection_name=corpus_management.milvus_dense_collection_name,
-                milvus_sparse_collection_name=corpus_management.milvus_sparse_collection_name,
-                milvus_uri=st.session_state.rag_config.milvus_uri,
-                use_milvus = st.session_state.milvus_connected,
-                semantic_retriever_top_k=5,
-                keywords_retriever_top_k=5,
-            )
+            if RagModal.TEXT == st.session_state.rag_modal:
+                st.session_state.semantic_retriever, st.session_state.keywords_retriever = build_text_corpus(
+                    nodes=refined_nodes,
+                    category=current_corpus_name,
+                    embed_model=st.session_state.rag_config.text_embed_model,
+                    milvus_dense_collection_name=dense_collection_name,
+                    milvus_sparse_collection_name=sparse_collection_name,
+                    milvus_uri=st.session_state.rag_config.milvus_uri,
+                    use_milvus = st.session_state.milvus_connected,
+                    semantic_retriever_top_k=5,
+                    keywords_retriever_top_k=5,
+                )
+                st.session_state.loaded_corpus = current_corpus_name
+            else:
+                # TODO(wangjintao): 待完善多模态逻辑
+                pass
             if st.session_state.semantic_retriever and st.session_state.keywords_retriever:
                 st.session_state.documents_loaded = True
-                corpus_management.create_collection_entry()
-                st.success("知识库创建成功!")
+                if st.session_state.milvus_connected:
+                    st.success("知识库创建成功, 已写入数据库!")
+                else:
+                    st.success("知识库创建成功!")
             else:
                 st.error("知识库创建失败!")
 
 st.markdown("---")
 
-selected_collections: list[str] = None
+# 连接数据库, 加载知识库
+selected_corpuses: list[str] = None
 warning_message = None
 st.markdown("# 加载数据库")
 # 显示数据库中已有的知识库
-if "existing_collections" in st.session_state:
-    selected_collections = st.multiselect(
-        "选择知识库",
-        st.session_state.existing_collections,
-        key="collection_selector",
-        disabled=not st.session_state.milvus_connected,
-    )
+#if "existing_collections" in st.session_state:
+# 根据启用的模态筛选显示的知识库列表
+existing_corpuses = st.session_state.corpus_management.list_corpuses(st.session_state.rag_modal)
+selected_corpuses = st.multiselect(
+    "选择知识库",
+    existing_corpuses,
+    key="collection_selector",
+    disabled=not st.session_state.milvus_connected,
+    max_selections=1
+)
 
 if st.button("加载知识库", disabled=not st.session_state.milvus_connected):
-    if not selected_collections:
+    if not selected_corpuses:
         warning_message = "请选择至少一个知识库"
     else:
-        milvus_dense_collection_name: str = None
-        milvus_sparse_collection_name: str = None
-        if os.path.exists(st.session_state.rag_config.collection_map_file_name):
-            with open(st.session_state.rag_config.collection_map_file_name, "r", encoding="utf-8") as f:
-                collection_map = json.load(f)[0]
-            for q in selected_collections:
-                milvs_dense_collection_name = collection_map[q]["dense_collection_name"]
-                milvs_sparse_collection_name = collection_map[q]["sparse_collection_name"]
-            # TODO(wangjintao): 判断是multi-modal, 是否可以实现一次性加载多个知识库
-            # TODO(wangjintao): 搞个按键表示是否支持多模态, json文件中的条目也储存是否为多模态的数据库
-            if not milvus_dense_collection_name or not milvus_sparse_collection_name:
+        dense_collection_name: str = None
+        sparse_collection_name: str = None
+        image_collection_name: str = None
+
+        for selected_corpus in selected_corpuses:
+            dense_collection_name, sparse_collection_name, image_collection_name = st.session_state.corpus_management.load_collection_entry(selected_corpus_name=selected_corpus)
+
+        if RagModal.TEXT == st.session_state.rag_modal:
+            if dense_collection_name and sparse_collection_name:
                 st.session_state.semantic_retriever, st.session_state.keywords_retriever = load_text_corpus(
                     embed_model=st.session_state.rag_config.text_embed_model,
-                    milvus_dense_collection_name=milvus_dense_collection_name,
-                    milvus_sparse_collection_name=milvus_sparse_collection_name,
+                    milvus_dense_collection_name=dense_collection_name,
+                    milvus_sparse_collection_name=sparse_collection_name,
                     milvus_uri=st.session_state.rag_config.milvus_uri,
                     semantic_retriever_top_k=5,
                     keywords_retriever_top_k=5,
                 )
+                st.session_state.loaded_corpus = selected_corpus
+                st.rerun()
+        elif RagModal.MULTI_MODAL == st.session_state.rag_modal:
+            # TODO(wangjintao): 待完善多模态逻辑
+            pass
+        else:
+            pass
 
 if warning_message:
     st.warning(warning_message, disabled=not st.session_state.milvus_connected)

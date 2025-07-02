@@ -2,6 +2,7 @@ import os
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Tuple, List, Union
+from enum import Enum
 if TYPE_CHECKING:
     from llama_index.core.bridge.langchain import Embeddings as LCEmbeddings
 from llama_index.core.base.embeddings.base import BaseEmbedding
@@ -26,61 +27,103 @@ from streamlit.runtime.uploaded_file_manager import UploadedFile
 
 EmbedType = Union[BaseEmbedding, "LCEmbeddings", str]
 
+class RagModal(Enum):
+    TEXT = "Text"
+    MULTI_MODAL = "MultiModal"
+
 class CorpusManagement:
-    def __init__(self, collection_map_path:str , current_corpus_name: str, is_multi_modal: bool = False):
-        self.current_corpus_name = current_corpus_name
-        self.is_multi_modal = is_multi_modal
-        self.collection_map_path = collection_map_path
-        self.dense_collection_name = current_corpus_name + "_dense_collection"
-        self.sparse_collection_name = current_corpus_name + "_sparse_collection"
-        self.image_collection_name = current_corpus_name + "_image_collection"
-        #self.collection_entry = self._create_collection_entry()
+    def __init__(self):
+        self.collection_map_path = "collection_map.json"
+        self.multi_modal_keyword = "MultiModal"
+        self.text_modal_keyword = "Text"
+        self.modal_key = "collection_modal"
 
-    def create_collection_entry(self, current_corpus_name: str, is_multi_modal: bool = False):
-        # 创建json文件, 存储知识库名称和对应的milvus collection名称
-        if True == is_multi_modal:
+        self.dense_collection_key = "dense_collection_name"
+        self.sparse_collection_key = "sparse_collection_name"
+        self.image_collection_key = "image_collection_name"
+
+    def create_collection_entry(self, current_corpus_name: str, modal: RagModal) -> Tuple[str, str, str]:
+        # 创建json文件, 存储知识库名称和对应的milvus collection名k
+        dense_collection_name = current_corpus_name + "_dense_collection"
+        sparse_collection_name = current_corpus_name + "_sparse_collection"
+        image_collection_name = current_corpus_name + "_image_collection"
+        if RagModal.MULTI_MODAL == modal:
             collection_entry = {
                 current_corpus_name: {
-                    "dense_collection_name": self.dense_collection_name,
-                    "sparse_collection_name": self.sparse_collection_name,
-                    "image_collection_name": self.image_collection_name,
+                    self.modal_key: self.multi_modal_keyword,
+                    self.dense_collection_key: dense_collection_name,
+                    self.sparse_collection_key: sparse_collection_name,
+                    self.image_collection_key: image_collection_name,
                 }
             }
-        else:
+        elif RagModal.TEXT == modal:
             collection_entry = {
                 current_corpus_name: {
-                    "dense_collection_name": self.dense_collection_name,
-                    "sparse_collection_name": self.sparse_collection_name,
+                    self.modal_key: self.text_modal_keyword,
+                    self.dense_collection_key: dense_collection_name,
+                    self.sparse_collection_key: sparse_collection_name,
                 }
             }
-
         if not os.path.exists(self.collection_map_path):
             with open(self.collection_map_path, "w", encoding="utf-8") as f:
-                json.dump([collection_entry], f, ensure_ascii=False, indent=2)
+                json.dump(collection_entry, f, ensure_ascii=False, indent=2)
         else:
             with open(self.collection_map_path, "r+", encoding="utf-8") as f:
                 try:
-                    data = json.load(f)
-                except Exception:
-                    data = []
-                # 将list[dict]转换为一个dict，便于更新
-                merged = {}
-                for item in data:
-                    merged.update(item)
-                # 更新或添加当前条目
-                merged.update(collection_entry)
-                # 再转回list[dict]格式
-                new_data = [{k: v} for k, v in merged.items()]
-                f.seek(0)
-                json.dump(new_data, f, ensure_ascii=False, indent=2)
-                f.truncate()
+                    # 若已有json数据, 则判断需要添加的collection是否存在, 若存在则更新, 若不存在则添加
+                    collection_map = json.load(f)
+                    if current_corpus_name not in collection_map:
+                        collection_map.update(collection_entry)
+                    else:
+                        collection_map[current_corpus_name][self.modal_key] = collection_entry[current_corpus_name][self.modal_key]
+                        collection_map[current_corpus_name][self.dense_collection_key] = collection_entry[current_corpus_name][self.dense_collection_key]
+                        collection_map[current_corpus_name][self.sparse_collection_key] = collection_entry[current_corpus_name][self.sparse_collection_key]
+                        if modal == RagModal.MULTI_MODAL:
+                            collection_map[current_corpus_name][self.image_collection_key] = collection_entry[self.image_collection_key]
+                    f.seek(0)
+                    f.truncate()
+                    f.write(json.dumps(collection_map, ensure_ascii=False, indent=2))
+                    f.flush()
+                except json.JSONDecodeError:
+                    # 若加载json数据失败, 则清空文件, 添加条例
+                    f.seek(0)
+                    f.truncate()
+                    f.write(json.dumps(collection_entry, ensure_ascii=False, indent=2))
+                    f.flush()
 
-    #def load_collection_entry(self, current_corpus_name: str):
-    #    # 从json文件中加载知识库名称和对应的milvus collection名称
-    #    if not os.path.exists(self.collection_map_path):
-    #        return None
-    #    with open(self.collection_map_path, "r", encoding="utf-8") as f:
+        return dense_collection_name, sparse_collection_name, image_collection_name
 
+    def load_collection_entry(self, selected_corpus_name: str):
+        dense_collection_name: str = None
+        sparse_collection_name: str = None
+        image_collection_name: str = None
+        if os.path.exists(self.collection_map_path):
+            with open(self.collection_map_path, "r", encoding="utf-8") as f:
+                collection_map = json.load(f)
+
+            dense_collection_name = collection_map[selected_corpus_name][self.dense_collection_key]
+            sparse_collection_name = collection_map[selected_corpus_name][self.sparse_collection_key]
+            if self.image_collection_key in collection_map[selected_corpus_name].values():
+                image_collection_name = collection_map[selected_corpus_name][self.image_collection_key]
+        return dense_collection_name, sparse_collection_name, image_collection_name
+
+    def list_corpuses(self, modal: RagModal) -> List[str]:
+        existing_corpuses: list[str] = []
+        if os.path.exists(self.collection_map_path):
+            with open(self.collection_map_path, "r", encoding="utf-8") as f:
+                try:
+                    collection_map = json.load(f)
+                    # 获取对应模态的知识库名
+                    if modal == RagModal.TEXT:
+                        existing_corpuses = [key for key, value in collection_map.items() if value[self.modal_key] == self.text_modal_keyword]
+                    elif modal == RagModal.MULTI_MODAL:
+                        existing_corpuses = [key for key, value in collection_map.items() if value[self.modal_key] == self.multi_modal_keyword]
+                    else:
+                        pass
+                except:
+                    pass
+
+        return existing_corpuses
 
 # 处理从前端上传的文件, 需要先输出到服务端本地再读取
 def process_uploaded_files(uploaded_files: List[UploadedFile]):
