@@ -4,8 +4,8 @@ from dotenv import load_dotenv
 from llama_index.postprocessor.dashscope_rerank import DashScopeRerank
 from llama_index.llms.dashscope import DashScope
 from utils.dashscope_embedding import DashScopeEmbedding
-from utils.doc_handler import RagModal, CorpusManagement, process_uploaded_files, build_text_corpus, load_text_corpus, load_multi_modal_corpus
-from utils.retrieve_pipline import expand_query, retrieve_documents
+from utils.doc_handler import RagModal, CorpusManagement, process_uploaded_files, build_text_modal_corpus, load_text_modal_corpus, load_multi_modal_corpus
+from utils.retrieve_pipline import expand_query
 from utils.rag_config import RagConfig
 from pymilvus import connections, utility
 #from st_pages import show_pages_from_config
@@ -30,6 +30,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+
+                                                                                    # Manage Session state
 if "rag_config" not in st.session_state:
     st.session_state.rag_config = RagConfig()
 if "rag_modal" not in st.session_state:
@@ -44,6 +46,10 @@ if "messages" not in st.session_state:
 #    st.session_state.documents_loaded = False
 if "loaded_corpus" not in st.session_state:
     st.session_state.loaded_corpus = None
+if "retrieval_pipeline" not in st.session_state:
+    st.session_state.retrieval_pipeline = None
+if "rag_enabled" not in st.session_state:
+    st.session_state.rag_enabled = False
 
 st.title("🤖 RAG-ChatBot")
 st.caption("Advanced RAG System with GraphRAG, Hybrid Retrieval, Neural Reranking and Chat History")

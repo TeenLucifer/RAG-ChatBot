@@ -28,6 +28,11 @@ class RagConfig:
             model_name=self.dashscope_text_embed_model_name,
             embed_batch_size=10
         )
+        self.mm_embed_model = DashScopeEmbedding(
+            api_key=self.dashscope_api_key,
+            model_name=self.dashscope_mm_embed_model_name,
+            embed_batch_size=10
+        )
         # 配置重排序模型
         self.rerank_model = DashScopeRerank(
             api_key=self.dashscope_api_key,

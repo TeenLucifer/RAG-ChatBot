@@ -24,6 +24,8 @@ import jieba
 from .dashscope_embedding import DashScopeEmbedding
 import streamlit as st
 from streamlit.runtime.uploaded_file_manager import UploadedFile
+from llama_index.core.node_parser import SimpleNodeParser
+from llama_index.core import SimpleDirectoryReader
 
 EmbedType = Union[BaseEmbedding, "LCEmbeddings", str]
 
@@ -47,7 +49,15 @@ class CorpusManagement:
         dense_collection_name = current_corpus_name + "_dense_collection"
         sparse_collection_name = current_corpus_name + "_sparse_collection"
         image_collection_name = current_corpus_name + "_image_collection"
-        if RagModal.MULTI_MODAL == modal:
+        if RagModal.TEXT == modal:
+            collection_entry = {
+                current_corpus_name: {
+                    self.modal_key: self.text_modal_keyword,
+                    self.dense_collection_key: dense_collection_name,
+                    self.sparse_collection_key: sparse_collection_name,
+                }
+            }
+        elif RagModal.MULTI_MODAL == modal:
             collection_entry = {
                 current_corpus_name: {
                     self.modal_key: self.multi_modal_keyword,
@@ -56,14 +66,9 @@ class CorpusManagement:
                     self.image_collection_key: image_collection_name,
                 }
             }
-        elif RagModal.TEXT == modal:
-            collection_entry = {
-                current_corpus_name: {
-                    self.modal_key: self.text_modal_keyword,
-                    self.dense_collection_key: dense_collection_name,
-                    self.sparse_collection_key: sparse_collection_name,
-                }
-            }
+        else:
+            pass
+
         if not os.path.exists(self.collection_map_path):
             with open(self.collection_map_path, "w", encoding="utf-8") as f:
                 json.dump(collection_entry, f, ensure_ascii=False, indent=2)
@@ -78,8 +83,14 @@ class CorpusManagement:
                         collection_map[current_corpus_name][self.modal_key] = collection_entry[current_corpus_name][self.modal_key]
                         collection_map[current_corpus_name][self.dense_collection_key] = collection_entry[current_corpus_name][self.dense_collection_key]
                         collection_map[current_corpus_name][self.sparse_collection_key] = collection_entry[current_corpus_name][self.sparse_collection_key]
+
                         if modal == RagModal.MULTI_MODAL:
-                            collection_map[current_corpus_name][self.image_collection_key] = collection_entry[self.image_collection_key]
+                            collection_map[current_corpus_name][self.image_collection_key] = collection_entry[current_corpus_name][self.image_collection_key]
+                        #    # 检查是否存在self.image_collection_key这个键，若存在则更新，若不存在则添加
+                        #    if self.image_collection_key in collection_map[current_corpus_name].keys():
+                        #        collection_map[current_corpus_name][self.image_collection_key] = collection_entry[current_corpus_name][self.image_collection_key]
+                        #    else:
+                        #        collection_map[current_corpus_name][self.image_collection_key] = collection_entry[current_corpus_name][self.image_collection_key]
                     f.seek(0)
                     f.truncate()
                     f.write(json.dumps(collection_map, ensure_ascii=False, indent=2))
@@ -139,13 +150,14 @@ def process_uploaded_files(uploaded_files: List[UploadedFile]):
                 f.write(file.getbuffer())
 
             if file.name.endswith(".pdf"):
-                pass
+                #refined_nodes = parse_pdf(uploaded_file=file_path)
+                refined_nodes = parse_directory(uploaded_file=file_path)
             elif file.name.endswith(".docx"):
                 pass
             elif file.name.endswith(".txt"):
                 pass
             elif file.name.endswith(".md"):
-                refined_nodes = document_segmentation(doc_path=file_path)
+                refined_nodes = parse_markdown(uploaded_file=file_path)
             else:
                 continue
             nodes.extend(refined_nodes)
@@ -156,6 +168,28 @@ def process_uploaded_files(uploaded_files: List[UploadedFile]):
             return
 
         return nodes
+
+def parse_directory(
+    uploaded_file: str,
+) -> List[BaseNode]:
+    pdf_name = os.path.splitext(os.path.basename(uploaded_file))[0]
+    save_path = f"converted_docs/{pdf_name}"
+
+    refined_nodes = []
+    text_nodes = parse_markdown(f"{save_path}/{pdf_name}.md")
+    refined_nodes.extend(text_nodes)
+    # 仅加载图片文件
+    reader = SimpleDirectoryReader(
+        input_dir=save_path,
+        required_exts=[".jpg", ".jpeg", ".png"],
+        file_metadata=lambda x: {"file_name": x}  # 记录文件名
+    )
+    image_documents = reader.load_data()
+    image_node_parser = SimpleNodeParser.from_defaults(chunk_size=1024, chunk_overlap=20)
+    image_nodes = image_node_parser.get_nodes_from_documents(image_documents)
+    refined_nodes.extend(image_nodes)
+
+    return refined_nodes
 
 # 解析pdf文件为markdown格式
 def parse_pdf(
@@ -182,20 +216,29 @@ def parse_pdf(
     rendered = converter(uploaded_file)
     doc_text, _, doc_images = text_from_rendered(rendered)
 
-    # 提取文件名和元数据
-    filename = uploaded_file.split("/")[-1] if "/" in uploaded_file else uploaded_file
-    metadata = {
-        "file_name": filename,
-        "source": "upload",
-        "category": category,
-    }
-    # 把文字部分转换为llamaindex的document
-    document = Document(
-        text=doc_text,
-        metadata=metadata,
-        exclude_llm_metadata_keys=["file_name", "source"],
+    # 文字转换为markdown, 图片保存到本地
+    pdf_name = os.path.splitext(os.path.basename(uploaded_file))[0]
+    save_path = f"converted_docs/{pdf_name}"
+    os.makedirs(save_path, exist_ok=True)
+    with open(f"{save_path}/{pdf_name}.md", "w", encoding="utf-8") as f: # 文字保存为md
+        f.write(doc_text)
+    for image_path, image_data in doc_images.items(): # 图片保存到本地
+        image_data.save(f"{save_path}/{image_path}")
+
+    refined_nodes = []
+    text_nodes = parse_markdown(f"{save_path}/{pdf_name}.md")
+    refined_nodes.extend(text_nodes)
+    # 仅加载图片文件
+    reader = SimpleDirectoryReader(
+        input_dir=save_path,
+        required_exts=[".jpg", ".png"],
+        file_metadata=lambda x: {"file_name": x}  # 记录文件名
     )
-    return document
+    image_documents = reader.load_data()
+    image_node_parser = SimpleNodeParser.from_defaults(chunk_size=1024, chunk_overlap=20)
+    image_nodes = image_node_parser.get_nodes_from_documents(image_documents)
+    refined_nodes.extend(image_nodes)
+    return refined_nodes
 
 # 中文分词器
 def bm25_chinese_tokenizer(text: str) -> List[str]:
@@ -207,13 +250,13 @@ def bm25_chinese_tokenizer(text: str) -> List[str]:
     return filtered_tokens
 
 # 文档切分
-def document_segmentation(
-    doc_path: str,
+def parse_markdown(
+    uploaded_file: str,
     documents: Document = None,
 ) -> List[BaseNode]:
     # 如果不传入Document对象, 则从文件路径加载文档
     if documents is None:
-        markdown_file_path = doc_path
+        markdown_file_path = uploaded_file
         # 加载Markdown文档
         documents = FlatReader().load_data(Path(markdown_file_path))
     # 初始化解析器
@@ -234,7 +277,7 @@ def document_segmentation(
     return refined_nodes
 
 # 建立语料库
-def build_text_corpus(
+def build_text_modal_corpus(
     nodes: List[BaseNode],
     category: str,
     embed_model: DashScopeEmbedding,
@@ -247,6 +290,7 @@ def build_text_corpus(
 ) -> Tuple[BaseRetriever, BaseRetriever]:
     # 检查milvus数据库能否连接上, 若未连接上, 则直接创建向量检索和字面检索库, 不再创建本地存储
     milvus_connected = False
+    text_nodes = [node for node in nodes if TextNode == type(node)]
     if True == use_milvus:
         try:
             connections.connect(uri=milvus_uri)
@@ -267,7 +311,7 @@ def build_text_corpus(
         )
         milvus_dense_storage_context = StorageContext.from_defaults(vector_store=milvus_dense_store)
         milvus_dense_index = VectorStoreIndex(
-            nodes=nodes,
+            nodes=text_nodes,
             embed_model=embed_model,
             storage_context=milvus_dense_storage_context,
             show_progress=True
@@ -300,7 +344,7 @@ def build_text_corpus(
         )
         milvus_sparse_storage_context = StorageContext.from_defaults(vector_store=milvus_sparse_store)
         milvus_sparse_index = VectorStoreIndex(
-            nodes=nodes,
+            nodes=text_nodes,
             storage_context=milvus_sparse_storage_context,
             show_progress=True,
         )
@@ -311,7 +355,7 @@ def build_text_corpus(
     else:
         # 连接不上数据库直接创建语料库, 不做本地存储
         vector_retrieve_index = VectorStoreIndex( # 创建向量索引
-            nodes=nodes,
+            nodes=text_nodes,
             embed_model=embed_model,
             show_progress=True,
         )
@@ -320,14 +364,14 @@ def build_text_corpus(
             vector_store_query_mode="default",
         )
         keywords_retriever = BM25Retriever.from_defaults( # 创建字面索引
-            nodes=nodes,
+            nodes=text_nodes,
             similarity_top_k=keywords_retriever_top_k,
             tokenizer=bm25_chinese_tokenizer,
         )
     return semantic_retriever, keywords_retriever
 
 # 从数据库加载文本语料库
-def load_text_corpus(
+def load_text_modal_corpus(
     embed_model: DashScopeEmbedding,
     milvus_dense_collection_name: str,
     milvus_sparse_collection_name: str,

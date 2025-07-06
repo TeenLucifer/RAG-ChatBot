@@ -4,8 +4,8 @@ from dotenv import load_dotenv
 from llama_index.postprocessor.dashscope_rerank import DashScopeRerank
 from llama_index.llms.dashscope import DashScope
 from utils.dashscope_embedding import DashScopeEmbedding
-from utils.doc_handler import process_uploaded_files, build_text_corpus, load_text_corpus, load_multi_modal_corpus
-from utils.retrieve_pipline import expand_query, retrieve_documents
+from utils.doc_handler import process_uploaded_files, build_text_modal_corpus, load_text_modal_corpus, load_multi_modal_corpus
+from utils.retrieve_pipline import expand_query, retrieve_text_modal, retrieve_multi_modal
 from utils.rag_config import RagConfig
 from pymilvus import connections, utility
 #from st_pages import show_pages_from_config
@@ -27,12 +27,6 @@ st.markdown("""
         .stButton>button { background-color: #00AAFF; color: white; }
     </style>
 """, unsafe_allow_html=True)
-
-                                                                                    # Manage Session state
-if "retrieval_pipeline" not in st.session_state:
-    st.session_state.retrieval_pipeline = None
-if "rag_enabled" not in st.session_state:
-    st.session_state.rag_enabled = False
 
 with st.sidebar:                                                                        # 📁 Sidebar
     st.header("📁 已加载知识库")
@@ -78,16 +72,30 @@ if prompt := st.chat_input(placeholder="Ask about your documents...", disabled=n
         # TODO(wangjintao): 待实现多轮对话
         # 🚀 Build context
         context = ""
-        response = retrieve_documents(
-            llm=st.session_state.rag_config.llm,
-            text_embed_model=st.session_state.rag_config.text_embed_model,
-            rerank_model=st.session_state.rag_config.rerank_model,
-            semantic_retriever=st.session_state.semantic_retriever,
-            keywords_retriever=st.session_state.keywords_retriever,
-            query=prompt,
-            dashscope_api_key=st.session_state.rag_config.dashscope_api_key,
-            dashscope_llm_model_name=st.session_state.rag_config.dashscope_llm_model_name,
-        )
+        if st.session_state.rag_modal == RagModal.TEXT:
+            response = retrieve_text_modal(
+                llm=st.session_state.rag_config.llm,
+                text_embed_model=st.session_state.rag_config.text_embed_model,
+                rerank_model=st.session_state.rag_config.rerank_model,
+                semantic_retriever=st.session_state.semantic_retriever,
+                keywords_retriever=st.session_state.keywords_retriever,
+                query=prompt,
+                dashscope_api_key=st.session_state.rag_config.dashscope_api_key,
+                dashscope_llm_model_name=st.session_state.rag_config.dashscope_llm_model_name,
+            )
+        elif st.session_state.rag_modal == RagModal.MULTI_MODAL:
+            response = retrieve_multi_modal(
+                query=prompt,
+                mllm=st.session_state.rag_config.mllm,
+                mm_embed_model=st.session_state.rag_config.mm_embed_model,
+                rerank_model=st.session_state.rag_config.rerank_model,
+                semantic_retriever=st.session_state.semantic_retriever,
+                keywords_retriever=st.session_state.keywords_retriever,
+                dashscope_api_key=st.session_state.rag_config.dashscope_api_key,
+                dashscope_mllm_model_name=st.session_state.rag_config.dashscope_mllm_model_name,
+            )
+        else:
+            pass
         # TODO(wangjintao): 待实现溯源
         # 响应流式输出
         for chunk in response.response_gen:

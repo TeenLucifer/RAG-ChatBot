@@ -1,5 +1,5 @@
 import streamlit as st
-from utils.doc_handler import RagModal, process_uploaded_files, build_text_corpus, load_text_corpus, load_multi_modal_corpus, CorpusManagement
+from utils.doc_handler import RagModal, process_uploaded_files, build_text_modal_corpus, build_multi_modal_corpus, load_text_modal_corpus, load_multi_modal_corpus, CorpusManagement
 from pymilvus import connections, utility
 import os
 import json
@@ -85,7 +85,7 @@ if uploaded_files and current_corpus_name and True == is_build_corpus:
                 modal=st.session_state.rag_modal
             )
             if RagModal.TEXT == st.session_state.rag_modal:
-                st.session_state.semantic_retriever, st.session_state.keywords_retriever = build_text_corpus(
+                st.session_state.semantic_retriever, st.session_state.keywords_retriever = build_text_modal_corpus(
                     nodes=refined_nodes,
                     category=current_corpus_name,
                     embed_model=st.session_state.rag_config.text_embed_model,
@@ -97,8 +97,22 @@ if uploaded_files and current_corpus_name and True == is_build_corpus:
                     keywords_retriever_top_k=5,
                 )
                 st.session_state.loaded_corpus = current_corpus_name
+            elif RagModal.MULTI_MODAL == st.session_state.rag_modal:
+                st.session_state.semantic_retriever, st.session_state.keywords_retriever = build_multi_modal_corpus(
+                    nodes=refined_nodes,
+                    category=current_corpus_name,
+                    embed_model=st.session_state.rag_config.mm_embed_model,
+                    milvus_dense_collection_name=dense_collection_name,
+                    milvus_sparse_collection_name=sparse_collection_name,
+                    milvus_image_collection_name=image_collection_name,
+                    milvus_uri=st.session_state.rag_config.milvus_uri,
+                    use_milvus=st.session_state.milvus_connected,
+                    semantic_retriever_top_k=5,
+                    keywords_retriever_top_k=5,
+                    image_retriever_top_k=5,
+                )
+                st.session_state.loaded_corpus = current_corpus_name
             else:
-                # TODO(wangjintao): 待完善多模态逻辑
                 pass
             if st.session_state.semantic_retriever and st.session_state.keywords_retriever:
                 st.session_state.documents_loaded = True
@@ -140,7 +154,7 @@ if st.button("加载知识库", disabled=not st.session_state.milvus_connected):
 
         if RagModal.TEXT == st.session_state.rag_modal:
             if dense_collection_name and sparse_collection_name:
-                st.session_state.semantic_retriever, st.session_state.keywords_retriever = load_text_corpus(
+                st.session_state.semantic_retriever, st.session_state.keywords_retriever = load_text_modal_corpus(
                     embed_model=st.session_state.rag_config.text_embed_model,
                     milvus_dense_collection_name=dense_collection_name,
                     milvus_sparse_collection_name=sparse_collection_name,
@@ -151,8 +165,19 @@ if st.button("加载知识库", disabled=not st.session_state.milvus_connected):
                 st.session_state.loaded_corpus = selected_corpus
                 st.rerun()
         elif RagModal.MULTI_MODAL == st.session_state.rag_modal:
-            # TODO(wangjintao): 待完善多模态逻辑
-            pass
+            if dense_collection_name and sparse_collection_name and image_collection_name:
+                st.session_state.semantic_retriever, st.session_state.keywords_retriever = load_multi_modal_corpus(
+                    embed_model=st.session_state.rag_config.mm_embed_model,
+                    milvus_dense_collection_name=dense_collection_name,
+                    milvus_sparse_collection_name=sparse_collection_name,
+                    milvus_image_collection_name=image_collection_name,
+                    milvus_uri=st.session_state.rag_config.milvus_uri,
+                    semantic_retriever_top_k=5,
+                    keywords_retriever_top_k=5,
+                    image_retriever_top_k=5,
+                )
+                st.session_state.loaded_corpus = selected_corpus
+                st.rerun()
         else:
             pass
 
