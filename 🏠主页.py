@@ -8,8 +8,6 @@ from utils.doc_handler import RagModal, CorpusManagement, process_uploaded_files
 from utils.retrieve_pipline import expand_query
 from utils.rag_config import RagConfig
 from pymilvus import connections, utility
-#from st_pages import show_pages_from_config
-#from st_pages import Page
 from llama_index.vector_stores.milvus import MilvusVectorStore
 import nest_asyncio
 import torch
@@ -42,8 +40,6 @@ if "milvus_connected" not in st.session_state:
     st.session_state.milvus_connected = False
 if "messages" not in st.session_state:
     st.session_state.messages = []
-#if "documents_loaded" not in st.session_state:
-#    st.session_state.documents_loaded = False
 if "loaded_corpus" not in st.session_state:
     st.session_state.loaded_corpus = None
 if "retrieval_pipeline" not in st.session_state:

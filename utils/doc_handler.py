@@ -182,7 +182,7 @@ def parse_directory(
     reader = SimpleDirectoryReader(
         input_dir=save_path,
         required_exts=[".jpg", ".jpeg", ".png"],
-        file_metadata=lambda x: {"file_name": x}  # 记录文件名
+        file_metadata=lambda x: {"file_name": x, "content": x}  # 记录文件名
     )
     image_documents = reader.load_data()
     image_node_parser = SimpleNodeParser.from_defaults(chunk_size=1024, chunk_overlap=20)

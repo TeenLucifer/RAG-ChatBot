@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from llama_index.postprocessor.dashscope_rerank import DashScopeRerank
 from llama_index.llms.dashscope import DashScope
 from .dashscope_embedding import DashScopeEmbedding
+from llama_index.multi_modal_llms.dashscope import DashScopeMultiModal
 
 class RagConfig:
     def __init__(self) -> None:
@@ -21,6 +22,10 @@ class RagConfig:
         self.llm = DashScope(
             api_key=self.dashscope_api_key,
             model_name=self.dashscope_llm_model_name,
+        )
+        self.mllm = DashScopeMultiModal(
+            api_key=self.dashscope_api_key,
+            model_name=self.dashscope_mllm_model_name,
         )
         # 配置嵌入模型
         self.text_embed_model = DashScopeEmbedding(
