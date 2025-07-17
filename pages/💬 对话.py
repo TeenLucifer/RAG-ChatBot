@@ -5,7 +5,7 @@ from llama_index.postprocessor.dashscope_rerank import DashScopeRerank
 from llama_index.llms.dashscope import DashScope
 from utils.dashscope_embedding import DashScopeEmbedding
 from utils.doc_handler import process_uploaded_files, build_text_modal_corpus, load_text_modal_corpus, load_multi_modal_corpus
-from utils.retrieve_pipline import expand_query, retrieve_text_modal, retrieve_multi_modal
+from utils.retrieve_pipline import expand_query, retrieve_text_modal, retrieve_multi_modal, multi_modal_synthesize_response
 from utils.rag_config import RagConfig
 from pymilvus import connections, utility
 from llama_index.vector_stores.milvus import MilvusVectorStore
@@ -82,13 +82,20 @@ if prompt := st.chat_input(placeholder="Ask about your documents...", disabled=n
                 dashscope_llm_model_name=st.session_state.rag_config.dashscope_llm_model_name,
             )
         elif st.session_state.rag_modal == RagModal.MULTI_MODAL:
-            response = retrieve_multi_modal(
+            text_nodes, image_nodes = retrieve_multi_modal(
                 query=prompt,
                 mllm=st.session_state.rag_config.mllm,
                 mm_embed_model=st.session_state.rag_config.mm_embed_model,
                 rerank_model=st.session_state.rag_config.rerank_model,
                 semantic_retriever=st.session_state.semantic_retriever,
                 keywords_retriever=st.session_state.keywords_retriever,
+                dashscope_api_key=st.session_state.rag_config.dashscope_api_key,
+                dashscope_mllm_model_name=st.session_state.rag_config.dashscope_mllm_model_name,
+            )
+            response = multi_modal_synthesize_response(
+                query=prompt,
+                text_nodes=text_nodes,
+                image_nodes=image_nodes,
                 dashscope_api_key=st.session_state.rag_config.dashscope_api_key,
                 dashscope_mllm_model_name=st.session_state.rag_config.dashscope_mllm_model_name,
             )
@@ -99,4 +106,7 @@ if prompt := st.chat_input(placeholder="Ask about your documents...", disabled=n
         for chunk in response.response_gen:
             full_response += chunk
             response_placeholder.markdown(full_response)
+        if RagModal.MULTI_MODAL == st.session_state.rag_modal:
+            for node in image_nodes:
+                st.image(node.node.image_path)
         st.session_state.messages.append({"role": "assistant", "content": full_response})

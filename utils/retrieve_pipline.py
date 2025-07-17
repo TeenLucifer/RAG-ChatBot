@@ -232,6 +232,62 @@ def retrieve_text_modal(
         )
         return response
 
+def multi_modal_synthesize_response(
+    query: str,
+    text_nodes: List[NodeWithScore],
+    image_nodes: List[NodeWithScore],
+    dashscope_api_key: str,
+    dashscope_mllm_model_name: str,
+) -> RESPONSE_TYPE:
+    if not text_nodes and not image_nodes:
+        return StreamingResponse("没有找到相关内容")
+    else:
+        # llamaindex自带的response synthesizer不支持dashscope多模态模型
+        # 需要自己写生成回答部分
+        context = "\n".join(
+            f"[Source {i+1}]: {node.text}"
+            for i, node in enumerate(text_nodes)
+        )
+        response_gen_str = (
+            "请按照以下步骤分析问题与上下文：\n"
+            "1.识别关键实体及其关联关系\n"
+            "2.核查不同信息源之间的逻辑矛盾\n"
+            "3.综合多维度上下文信息和图片信息\n"
+            "4.构建结构化应答框架\n"
+            "\n"
+            "上下文背景：\n"
+            "{context}\n"
+            "\n"
+            "问题：\n"
+            "\n"
+            "{query}\n"
+            "\n"
+            "生成回答："
+        )
+        system_content = []
+        user_content = []
+        system_content.append({"text": response_gen_str.format(context=context, query=query)})
+        user_content.append({"text": query})
+        for node in image_nodes:
+            user_content.append({"image": node.node.image_path})
+        response_gen_messages = [
+            {
+                "role": "system",
+                "content": system_content
+            },
+            {
+                "role": "user",
+                "content": user_content
+            }
+        ]
+        response=dashscope.MultiModalConversation.call(
+            api_key=dashscope_api_key,
+            model=dashscope_mllm_model_name,
+            messages=response_gen_messages,
+        )
+        answer = response.output.choices[0].message.content[0]["text"]
+        return StreamingResponse(answer)
+
 def retrieve_multi_modal(
     query: str,
     mllm: DashScopeMultiModal,
@@ -241,7 +297,7 @@ def retrieve_multi_modal(
     keywords_retriever: BaseRetriever,
     dashscope_api_key: str,
     dashscope_mllm_model_name: str,
-) -> RESPONSE_TYPE:
+):
     # 查询扩写
     sub_queries, hypothesises = expand_query(
         use_multi_modal=True,
@@ -293,49 +349,4 @@ def retrieve_multi_modal(
     filtered_image_nodes = reranked_image_nodes
     filtered_nodes = filtered_text_nodes + filtered_image_nodes
 
-    if not filtered_nodes:
-        return StreamingResponse("没有找到相关内容")
-    else:
-        # llamaindex自带的response synthesizer不支持dashscope多模态模型
-        # 需要自己写生成回答部分
-        context = "\n".join(
-            f"[Source {i+1}]: {node.text}"
-            for i, node in enumerate(filtered_nodes)
-        )
-        response_gen_str = (
-            "请按照以下步骤分析问题与上下文：\n"
-            "1.识别关键实体及其关联关系\n"
-            "2.核查不同信息源之间的逻辑矛盾\n"
-            "3.综合多维度上下文信息和图片信息\n"
-            "4.构建结构化应答框架\n"
-            "\n"
-            "上下文背景：\n"
-            "{context}\n"
-            "\n"
-            "问题：\n"
-            "\n"
-            "{query}\n"
-            "\n"
-            "生成回答："
-        )
-        system_content = []
-        for node in filtered_image_nodes:
-            system_content.append({"image": node})
-        system_content.append({"text": response_gen_str.format(context=context, query=query)})
-        response_gen_messages = [
-            {
-                "role": "system",
-                "content": system_content
-            },
-            {
-                "role": "user",
-                "content": [{"text": query}]
-            }
-        ]
-        response=dashscope.MultiModalConversation.call(
-            api_key=dashscope_api_key,
-            model=dashscope_mllm_model_name,
-            messages=response_gen_messages,
-        )
-        answer = response.output.choices[0].message.content[0]["text"]
-        return StreamingResponse(answer)
+    return filtered_text_nodes, filtered_image_nodes
