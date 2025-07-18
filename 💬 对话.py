@@ -1,18 +1,14 @@
 import os
-import streamlit as st
-from dotenv import load_dotenv
-from llama_index.postprocessor.dashscope_rerank import DashScopeRerank
-from llama_index.llms.dashscope import DashScope
-from utils.dashscope_embedding import DashScopeEmbedding
-from utils.doc_handler import process_uploaded_files, build_text_modal_corpus, load_text_modal_corpus, load_multi_modal_corpus
-from utils.retrieve_pipline import expand_query, retrieve_text_modal, retrieve_multi_modal, multi_modal_synthesize_response
-from utils.rag_config import RagConfig
-from pymilvus import connections, utility
-from llama_index.vector_stores.milvus import MilvusVectorStore
-from utils.doc_handler import RagModal, CorpusManagement
+import torch
 import nest_asyncio
+import streamlit as st
+from utils.retrieve_pipline import retrieve_text_modal, retrieve_multi_modal, multi_modal_synthesize_response
+from utils.doc_handler import RagModal, CorpusManagement
+from utils.rag_config import RagConfig
 
-nest_asyncio.apply()
+torch.classes.__path__ = [os.path.join(torch.__path__[0], torch.classes.__file__)]# 防止torch报错
+
+nest_asyncio.apply() # 防止异步报错
 
 # Custom CSS
 st.markdown("""
@@ -26,15 +22,29 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+if "rag_config" not in st.session_state:
+    st.session_state.rag_config = RagConfig()
+if "rag_modal" not in st.session_state:
+    st.session_state.rag_modal = RagModal.TEXT
+if "corpus_management" not in st.session_state:
+    st.session_state.corpus_management = CorpusManagement()
+if "milvus_connected" not in st.session_state:
+    st.session_state.milvus_connected = False
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "loaded_corpus" not in st.session_state:
+    st.session_state.loaded_corpus = None
+if "retrieval_pipeline" not in st.session_state:
+    st.session_state.retrieval_pipeline = None
+if "rag_enabled" not in st.session_state:
+    st.session_state.rag_enabled = False
+
 with st.sidebar:                                                                        # 📁 Sidebar
     st.header("📁 已加载知识库")
     if "loaded_corpus" in st.session_state and st.session_state.loaded_corpus:
         st.markdown(f"**当前知识库:** {st.session_state.loaded_corpus}")
-    st.markdown("---")
-    st.header("⚙️ RAG 参数设置")
 
-    checkbos_value = st.checkbox("多模态问答", value=False if RagModal.TEXT == st.session_state.rag_modal else True)
-    st.session_state.rag_modal = RagModal.MULTI_MODAL if checkbos_value else RagModal.TEXT
+    st.markdown("---")
 
     if st.button("清除历史对话"):
         st.session_state.messages = []
@@ -49,7 +59,7 @@ with st.sidebar:                                                                
 
 # 💬 Chat Interface
 st.title("🤖 RAG-ChatBot")
-st.caption("Advanced RAG System with GraphRAG, Hybrid Retrieval, Neural Reranking and Chat History")
+st.caption("基于llama-index搭建的RAG系统, 支持数据库存储、意图判断、查询扩写、多模态检索、多路召回")
 
 # Display messages
 for message in st.session_state.messages:

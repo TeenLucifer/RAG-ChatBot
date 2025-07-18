@@ -1,22 +1,16 @@
 # 检索功能(向量+字面检索 配合问句改写实现多路召回)
 
-import os
-from typing import List, Union, Sequence
-from dotenv import load_dotenv
-from llama_index.core import VectorStoreIndex, StorageContext, PromptTemplate, get_response_synthesizer, Settings
-from llama_index.core.schema import TextNode, ImageNode, ImageDocument, NodeWithScore
+import dashscope
+from typing import List
+from llama_index.core import get_response_synthesizer
+from llama_index.core.schema import TextNode, ImageNode, NodeWithScore
 from llama_index.core.base.response.schema import RESPONSE_TYPE
 from llama_index.embeddings.dashscope import DashScopeEmbedding
 from llama_index.llms.dashscope import DashScope
 from llama_index.multi_modal_llms.dashscope import DashScopeMultiModal
-from llama_index.vector_stores.milvus import MilvusVectorStore
-from llama_index.vector_stores.milvus.utils import BM25BuiltInFunction
-from llama_index.core.base.llms.types import MessageRole, ChatMessage
 from llama_index.postprocessor.dashscope_rerank import DashScopeRerank
 from llama_index.core.base.base_retriever import BaseRetriever
-import dashscope
 from llama_index.core.base.response.schema import StreamingResponse
-#from llama_index.core.chat_engine import CustomChatEngine
 
 # TODO(wangjintao): 待实现CustomChatEngine, 带有chat history的对话引擎
 #class TextModalChatEngine(CustomChatEngine):

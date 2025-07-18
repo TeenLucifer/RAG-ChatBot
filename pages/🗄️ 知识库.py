@@ -1,8 +1,6 @@
 import streamlit as st
-from utils.doc_handler import RagModal, process_uploaded_files, build_text_modal_corpus, build_multi_modal_corpus, load_text_modal_corpus, load_multi_modal_corpus, CorpusManagement
-from pymilvus import connections, utility
-import os
-import json
+from utils.doc_handler import RagModal, process_uploaded_files, build_text_modal_corpus, build_multi_modal_corpus, load_text_modal_corpus, load_multi_modal_corpus
+from pymilvus import connections
 
 # Custom CSS
 st.markdown("""
@@ -18,12 +16,13 @@ st.markdown("""
 
 # 侧边栏管理
 with st.sidebar:
-    st.header("📁 已加载知识库")
-    if "loaded_corpus" in st.session_state and st.session_state.loaded_corpus:
-        st.markdown(f"**当前知识库:** {st.session_state.loaded_corpus}")
-    st.markdown("---")
-    st.header("⚙️ Milvus数据库设置")
+    st.header("⚙️ RAG 参数设置")
+    checkbos_value = st.checkbox("多模态问答", value=False if RagModal.TEXT == st.session_state.rag_modal else True)
+    st.session_state.rag_modal = RagModal.MULTI_MODAL if checkbos_value else RagModal.TEXT
 
+    st.markdown("---")
+
+    st.header("⚙️ Milvus数据库设置")
     st.text("milvus uri")
     milvus_uri_input, milvus_connect_button = st.columns([3, 1])
     with milvus_uri_input:
