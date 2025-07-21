@@ -243,7 +243,7 @@ def multi_modal_synthesize_response(
             for i, node in enumerate(text_nodes)
         )
         response_gen_str = (
-            "请按照以下步骤分析问题与上下文：\n"
+            "请按照以下步骤分析问题与上下文, 并输出返回最终的答案(不需要中间分析过程)：\n"
             "1.识别关键实体及其关联关系\n"
             "2.核查不同信息源之间的逻辑矛盾\n"
             "3.综合多维度上下文信息和图片信息\n"
@@ -340,7 +340,7 @@ def retrieve_multi_modal(
     # 过滤掉低于阈值的节点
     filtered_text_nodes = [node for node in reranked_text_nodes if node.score > 0.4]
     filtered_image_nodes = [node for node in reranked_image_nodes if node.score > 0.4]
-    filtered_image_nodes = reranked_image_nodes
+    #filtered_image_nodes = reranked_image_nodes
     filtered_nodes = filtered_text_nodes + filtered_image_nodes
 
     return filtered_text_nodes, filtered_image_nodes

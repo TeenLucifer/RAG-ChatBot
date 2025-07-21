@@ -150,8 +150,8 @@ def process_uploaded_files(uploaded_files: List[UploadedFile]):
                 f.write(file.getbuffer())
 
             if file.name.endswith(".pdf"):
-                #refined_nodes = parse_pdf(uploaded_file=file_path)
-                refined_nodes = parse_directory(uploaded_file=file_path)
+                refined_nodes = parse_pdf(uploaded_file=file_path)
+                #refined_nodes = parse_directory(uploaded_file=file_path)
             elif file.name.endswith(".docx"):
                 pass
             elif file.name.endswith(".txt"):
@@ -231,8 +231,8 @@ def parse_pdf(
     # 仅加载图片文件
     reader = SimpleDirectoryReader(
         input_dir=save_path,
-        required_exts=[".jpg", ".png"],
-        file_metadata=lambda x: {"file_name": x}  # 记录文件名
+        required_exts=[".jpg", ".jpeg", ".png"],
+        file_metadata=lambda x: {"file_name": x, "content": x}  # 记录文件名
     )
     image_documents = reader.load_data()
     image_node_parser = SimpleNodeParser.from_defaults(chunk_size=1024, chunk_overlap=20)

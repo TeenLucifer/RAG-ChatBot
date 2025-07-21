@@ -16,8 +16,7 @@ class RagConfig:
         self.dashscope_mm_embed_model_name   = os.getenv("DASHSCOPE_MM_EMBED_MODEL_NAME")
         self.milvus_uri                      = os.getenv("MILVUS_URI")
         self.collection_map_file_name        = os.getenv("COLLECTION_MAP_FILE_NAME")
-        #self.milvus_dense_collection_name    = "RAG_CHATBOT_" + "TEXT_EMBED" + "_DENSE_COLLECTION"
-        #self.milvus_sparse_collection_name   = "RAG_CHATBOT_" + "TEXT_EMBED" + "_SPARSE_COLLECTION"
+
         # 配置大语言模型
         self.llm = DashScope(
             api_key=self.dashscope_api_key,

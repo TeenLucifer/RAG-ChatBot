@@ -2,6 +2,8 @@
 ## 项目简介
 本项目基于llama-index实现了一个RAG的范例, 用多路召回+重排序的方案搭建, 作为作者阶段性学习成果的输出.
 
+![演示效果](docs/RAG-ChatBot-Run.gif)
+
 ### 亮点
 * 支持图片+文本多模态召回
 * llm/embedding/rerank都用[阿里云百炼](https://bailian.console.aliyun.com)API实现, 无需部署成本
